@@ -1,0 +1,85 @@
+optimizer : {
+  type: AdamW,
+  kwargs: {
+  lr : 0.001,
+  weight_decay : 0.05        # the reference regularizes the weights explicitly
+                             # (weights_decay 1e-3 * sum of l2_loss); here the
+                             # repo's AdamW does it
+}}
+
+scheduler: {
+  type: CosLR,
+  kwargs: {
+    epochs: 150,
+    initial_epochs : 10
+}}
+
+dataset: {
+  train: { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'train', npoints: 1024 } },
+  val:   { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'valid', npoints: 1024 } },
+}
+
+model: {
+  NAME: KPConv_Classification,
+  cls_dim: 14,                    # Number of classes (same as the other models)
+  use_class_weights: true,
+  label_smoothing: 0.1,
+  cls_loss: focal,                # 'ce' (default) | 'focal' — both honour use_class_weights + label_smoothing
+  focal_gamma: 2.0,
+
+  # 5 layers: widths 64 -> 128 -> 256 -> 512 -> 1024, each resnetb outputs 2*fdim,
+  # so global_average sees 2048 features.
+  architecture: [simple,
+                 resnetb,
+                 resnetb_strided,
+                 resnetb,
+                 resnetb_strided,
+                 resnetb,
+                 resnetb_strided,
+                 resnetb_deformable,
+                 resnetb_deformable_strided,
+                 resnetb_deformable,
+                 global_average],
+  num_kernel_points: 15,          # kernel points per KPConv
+  first_features_dim: 64,         # width of layer 0
+  in_features_dim: 1,             # 1 = a column of ones (reference), 4 = ones ++ xyz
+  KP_extent: 1.0,                 # influence radius of a kernel point, in units of dl
+  KP_influence: linear,           # 'constant' | 'linear' | 'gaussian'
+  convolution_mode: sum,          # 'sum' | 'closest'
+  fixed_kernel_points: center,    # 'none' | 'center' | 'verticals'
+  density_parameter: 5.0,         # neighbourhood density for deformable convs
+  modulated: false,               # deformable convs also predict a modulation
+  use_batch_norm: true,
+  batch_norm_momentum: 0.98,      # TF convention; the port uses torch's 1 - 0.98
+  offsets_loss: fitting,          # 'fitting' | 'permissive' | 'none'
+  offsets_decay: 0.1,             # NOTE: under nn.DataParallel with G GPUs this
+                                  # term is applied once per replica (see the
+                                  # model docstring, deviation 8) - divide by G,
+                                  # or launch with DDP / a single GPU
+  dropout: 0.5,                   # reference keep_prob 0.5 before the logits
+  logits_init: reference,         # 'reference' = weight_variable, stddev sqrt(2/cls_dim)
+                                  #   -> initial logits around +-30 and a large first step
+                                  # 'repo' = trunc_normal_(std=.02), as in the other models
+
+  # `first_subsampling_dl` is the resolution of the *input* cloud, in the
+  # dataset's own units. The reference uses 0.02 m on ModelNet40 meshes;
+  # BoneDataset normalises every cloud into the unit sphere, where 1024 points
+  # sit ~0.08 apart. Every radius follows from it:
+  #   kernel extent at layer l = KP_extent * dl * 2**l          (0.08 -> 1.28)
+  #   neighbour search radius  = dl * KP_extent * 2.5 * 2**l    (0.20 -> 3.20)
+  # so raising it widens every neighbourhood; keep it near the mean point spacing.
+  first_subsampling_dl: 0.08,
+  subsampling: fps,               # 'fps' (fixed cloud lengths, this repo's FPS)
+                                  # | 'grid' (the reference's voxel barycentres)
+  sampling_ratio: 4,              # fps only: points are divided by 4 per layer,
+                                  # matching the reference's dl -> 2*dl density change
+  max_neighbors: 32               # closest neighbours kept per point (scalar or
+                                  # one entry per layer); the reference calibrates
+                                  # this per dataset as `neighborhood_limits`
+}
+
+npoints: 1024
+total_bs: 64
+step_per_update: 1
+max_epoch: 150
+grad_norm_clip: 100               # reference grad_clip_norm

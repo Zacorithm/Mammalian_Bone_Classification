@@ -1,0 +1,6 @@
+NAME: BoneDataset
+METADATA_FILE_PATH: metadata/metadata.csv
+DATA_PATH: data/point_clouds   # folder containing the .ply files listed in the metadata CSV ("File" column)
+N_POINTS: 1024
+NUM_CATEGORY: 14
+sampling_algo: FPS

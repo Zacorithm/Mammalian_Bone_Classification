@@ -1,0 +1,65 @@
+optimizer : {
+  type: AdamW,
+  kwargs: {
+  lr : 0.001,
+  weight_decay : 0.05
+}}
+
+scheduler: {
+  type: CosLR,
+  kwargs: {
+    epochs: 150,
+    initial_epochs : 10
+}}
+
+dataset: {
+  train: { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'train', npoints: 1024 } },
+  val:   { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'valid', npoints: 1024 } },
+}
+
+model: {
+  NAME: PointCNN_Classification,
+  cls_dim: 14,
+  use_class_weights: true,
+  label_smoothing: 0.1,
+  cls_loss: ce,   # 'ce' (default) | 'focal' — both honour use_class_weights + label_smoothing
+  focal_gamma: 2.0,
+
+  #   K = neighbors, D = dilation (kNN is run with K*D then strided by D),
+  #   P = representative points out (-1 = keep all; equal to previous P = no sampling),
+  #   C = output channels.
+  #   C_pts_fts and the depth multiplier are DERIVED from these (pointcnn.py:107-113),
+  #   giving 24 / 60 / 120 / 240 channels into the X product.
+  #   BoneDataset clouds are unit-sphere normalized like the original's ModelNet h5
+  #   files, so no hyperparameter needs rescaling.
+  xconv_params: [
+    { K: 8,  D: 1, P: -1,  C: 48  },
+    { K: 12, D: 2, P: 384, C: 96  },
+    { K: 16, D: 2, P: 128, C: 192 },
+    { K: 16, D: 3, P: 128, C: 384 }
+  ],
+  with_X_transformation: true,      # false = the paper's no-X ablation (-56 480 params)
+  with_global: true,                # last layer concatenates a dense(qrs) branch of C//4
+  sampling: fps,                    # 'fps' (recommended) | 'random' (original ModelNet cls)
+  sorting_method: null,             # not implemented (unused by every cls setting)
+
+  fc_params: [
+    { C: 384, dropout_rate: 0.0 },
+    { C: 192, dropout_rate: 0.8 }   # original value; 0.5 is a reasonable fallback on
+                                    # a 14-class, ~5.8k-sample dataset (blueprint 11.6)
+  ],
+
+  per_point_supervision: true,      # loss over all P_last representative points
+  per_point_only: true,             # true = original objective; false = pooled + aux term
+  aux_weight: 1.0,                  # used only when per_point_only is false
+
+  bn_momentum: 0.01,                # == TF momentum 0.99   (blueprint section 9.3)
+  bn_eps: 0.001,                    # TF batch_normalization default
+  activation: elu                   # PointCNN uses ELU everywhere, never ReLU
+}
+
+npoints: 1024
+total_bs: 64
+step_per_update: 1
+max_epoch: 150
+grad_norm_clip: 10

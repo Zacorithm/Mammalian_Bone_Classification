@@ -1,0 +1,65 @@
+optimizer: {
+  type: AdamW,
+  kwargs: {
+    lr: 0.001,
+    weight_decay: 0.05
+  }
+}
+
+scheduler: {
+  type: CosLR,
+  kwargs: {
+    epochs: 150,
+    initial_epochs: 10
+  }
+}
+
+dataset: {
+  train: { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'train', npoints: 1024 } },
+  val:   { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'valid', npoints: 1024 } },
+}
+
+model: {
+  NAME: PointTransformerV3_Classification,
+  cls_dim: 14,
+  use_class_weights: true,
+  label_smoothing: 0.1,
+  cls_loss: focal,   # 'ce' (default) | 'focal' — both honour use_class_weights + label_smoothing
+  focal_gamma: 2.0,
+
+  # input featurization: xyz + ||xyz|| + xyz^2 built inside the model
+  in_channels: 7,
+
+  # serialization (space-filling curves; batch-major codes)
+  # reference default: all four curves; blocks cycle order_index = block_i % len(orders)
+  orders: ['z', 'z-trans', 'hilbert', 'hilbert-trans'],
+  grid_size: 0.02,
+
+  # encoder configuration
+  enc_depths: [2, 2, 2, 6, 2],
+  enc_channels: [32, 64, 128, 256, 512],
+  enc_num_head: [2, 4, 8, 16, 32],
+  # reference default. Without flash_attn the math path shrinks this per stage to
+  # min(smallest sample, patch_size), so stage 0 becomes full attention over the
+  # cloud (1024 pts) -- lower this if attention memory is tight.
+  enc_patch_size: [1024, 1024, 1024, 1024, 1024],
+  stride: [2, 2, 2, 2],
+
+  # regularization / attention
+  mlp_ratio: 4.0,
+  qkv_bias: true,
+  attn_drop: 0.0,
+  proj_drop: 0.0,
+  drop_path: 0.3,
+  enable_flash: true,
+  enable_rpe: false,
+  upcast_attention: false,
+  upcast_softmax: false,
+  shuffle_orders: true
+}
+
+npoints: 1024
+total_bs: 64
+step_per_update: 1
+max_epoch: 150
+grad_norm_clip: 10

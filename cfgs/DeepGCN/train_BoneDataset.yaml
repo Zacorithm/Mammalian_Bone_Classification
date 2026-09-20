@@ -1,0 +1,63 @@
+optimizer : {
+  type: AdamW,
+  kwargs: {
+  lr : 0.001,
+  weight_decay : 0.05
+}}
+
+scheduler: {
+  type: CosLR,
+  kwargs: {
+    epochs: 150,
+    initial_epochs : 10
+}}
+
+dataset: {
+  train: { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'train', npoints: 1024 } },
+  val:   { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'valid', npoints: 1024 } },
+}
+
+model: {
+  NAME: DeepGCN_Classification,
+  cls_dim: 14,
+  use_class_weights: true,
+  label_smoothing: 0.1,
+  cls_loss: focal,   # 'ce' (default) | 'focal' — both honour use_class_weights + label_smoothing
+  focal_gamma: 2.0,
+
+  block: res,                       # 'res' (ResGCN, default) | 'plain' | 'dense'
+  conv: edge,                       # 'edge' (EdgeConv) | 'mr' (max-relative)
+  n_blocks: 28,                     # ResGCN-28, the paper's flagship.
+                                    # 14 roughly halves the cost; 'dense' needs
+                                    # far more memory (the reference used 4 GPUs).
+  n_filters: 64,                    # channels of the deep features
+  k: 9,                             # neighbours per graph
+  in_channels: 3,                   # xyz
+  emb_dims: 1024,                   # fusion width; pooling doubles it (max+mean)
+  dropout: 0.5,                     # on the first two prediction layers
+  act: relu,                        # 'relu' | 'leakyrelu' | 'prelu'
+  norm: batch,                      # 'batch' | 'none'. The reference also offers
+                                    # 'instance', but it is broken for the cls head
+                                    # (InstanceNorm2d(affine=False) has weight=None,
+                                    # and cannot normalize the pooled [B,C,1,1]
+                                    # tensors) -- rejected at construction.
+  bias: true,
+
+  use_dilation: true,               # block i queries k*(i+1) neighbours, strides by i+1
+  use_stochastic: true,             # random k-subset with probability epsilon (train only)
+  epsilon: 0.2,                     # stochastic dilation probability
+
+  weight_init: kaiming              # 'kaiming' (original, load-bearing at 28 layers)
+                                    # | 'trunc_normal' (this repo's convention)
+}
+
+npoints: 1024
+total_bs: 64                      # Original batch size; the 28 dynamic kNN graphs per
+                                  # forward are the memory/time driver. Measured on one
+                                  # GPU (ResGCN-28, 1024 pts): bs 32 = 337 ms/step,
+                                  # 7.8 GB, ~1.0 min/epoch of training; bs 64 = 404 ms/step,
+                                  # 15.6 GB, ~0.6 min/epoch (faster, still fits).
+                                  # n_blocks 14 at bs 32 = 163 ms/step, 4.2 GB.
+step_per_update: 1
+max_epoch: 150
+grad_norm_clip: 10

@@ -1,0 +1,62 @@
+optimizer : {
+  type: AdamW,
+  kwargs: {
+  lr : 0.001,
+  weight_decay : 0.05
+}}
+
+scheduler: {
+  type: CosLR,
+  kwargs: {
+    epochs: 150,
+    initial_epochs : 10
+}}
+
+dataset: {
+  train: { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'train', npoints: 1024 } },
+  val:   { _base_: cfgs/dataset_configs/bone_dataset_config.yaml, others: { subset: 'valid', npoints: 1024 } },
+}
+
+model: {
+  NAME: GridGCN_Classification,
+  cls_dim: 14,
+  use_class_weights: true,
+  label_smoothing: 0.1,
+  cls_loss: focal,   # 'ce' (default) | 'focal' — both honour use_class_weights + label_smoothing
+  focal_gamma: 2.0,
+
+  coord_shift:     [1.0, 1.0, 1.0],                                    # lidar_coord
+  voxel_size_lst:  [[0.05,0.05,0.05], [0.25,0.25,0.25], [2.0,2.0,2.0]],
+  grid_size_lst:   [[40,40,40],       [8,8,8],           [1,1,1]],
+  max_o_grid_lst:  [1024, 128, 1],    # O: centers per stage (last = 1 -> global pooling)
+  max_p_grid_lst:  [64, 64, 128],     # P: node points per center
+  kernel_size_lst: [7, 3, 1],         # cube-query window, in voxels
+  query_type: ball,                   # 'ball' (default) | 'cube' (exact, memory-heavy) | 'knn'
+  radius_lst: null,                   # null -> sqrt(3)*kernel_size*voxel_size/2 per stage
+  loc_within: true,                   # centers = weight-weighted voxel centroids
+  deterministic_eval: true,           # switch RVS randomness off in eval() for reproducible logits
+
+  attfdim: 4,                         # edge descriptor: 4 = [dist, dxyz]   (3/4/5/10/11/12)
+  localfdim: 3,                       # node descriptor: 3 = [dxyz]         (3/4/5/10/11/12)
+  pt_ele_dim:  [[64,64,128],  [128,128,256], [256,256,512]],   # node-feature MLP
+  att_ele_dim: [[64,128,128], [128,256,256], [256,512,512]],   # edge-attention MLP
+  #   constraint: att_ele_dim[i][-1] == pt_ele_dim[i][-1]  (elementwise gate)
+  use_context: true,                  # grid context pooling (cntxt_mlp_lst = [[],[],[]])
+  cntxt_mlp_lst: [[], [], []],        # [] = pool with no MLP, as shipped
+  att_full: next,                     # 'next' (post-MLP feats) | 'last' (pre-MLP) | 'off'
+  gcn_outDim: [[], [], []],           # post-aggregation MLP; [] -> ReLU only
+  agg: max_pooling,                   # 'max_pooling' | 'max'
+  relu: true,
+
+  head_dims: [512, 256],
+  dropout: 0.5,
+
+  bn_momentum: 0.1,                   # == MXNet bn_decay 0.9  (blueprint section 11.1)
+  bn_eps: 0.001                       # MXNet BatchNorm default
+}
+
+npoints: 1024
+total_bs: 64                      # Original batch size; stage-0 CAGQ is the memory driver
+step_per_update: 1
+max_epoch: 150
+grad_norm_clip: 10

@@ -1,0 +1,22 @@
+from .build import build_model_from_cfg
+import models.PointNet
+import models.PointNet2
+import models.DGCNN
+import models.PCT
+import models.PointTransformer
+import models.PointTransformer2
+import models.PointTransformer3
+import models.PointMLP
+import models.PointNeXt
+import models.Point_BERT
+import models.Point_MAE
+import models.Point_FEMAE
+import models.Point_GPT
+import models.Point_MAMBA
+import models.Mamba3D
+import models.GridGCN
+import models.PointCNN
+import models.DeepGCN
+import models.PointConv
+import models.SpiderCNN
+import models.KPConv

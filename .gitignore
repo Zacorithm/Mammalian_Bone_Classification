@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Experiment outputs: checkpoints, logs, TensorBoard, evaluation dumps, embeddings
+experiments/
+*.pth
+*.pt
+*.ckpt
+*.log
+*.npz
+
+# Point clouds -- never commit these (the metadata/ folder is tracked)
+data/
+*.ply
+
+# Local tooling / editors / OS
+.claude/
+.vscode/
+.idea/
+.DS_Store

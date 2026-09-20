@@ -1,0 +1,5 @@
+NAME: BoneDataset_pretrain
+METADATA_PATH: metadata/metadata.csv
+DATA_PATH: data/point_clouds   # folder containing the .ply files listed in the metadata CSV ("File" column)
+npoints: 1024
+NUM_CATEGORY: 14
